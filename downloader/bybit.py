@@ -3,11 +3,11 @@ import re
 import requests
 import logging
 import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
 from tgob.file_utils import verify_file, download_file
 from tqdm import tqdm
 
-def download_and_verify(ticker, file_name, index, progress_bar, basedir=''):
+def download_and_verify(ticker, file_name, index, basedir=''):
     url = f"https://public.bybit.com/trading/{ticker}/{file_name}"
     dir_name = f"raw{ticker.lower()}"
     dir_name = os.path.join(basedir, dir_name)
@@ -17,7 +17,6 @@ def download_and_verify(ticker, file_name, index, progress_bar, basedir=''):
         os.makedirs(dir_name)
 
     if verify_file(file_path, file_name, index):
-        progress_bar.update(1)
         return
 
     while True:
@@ -25,9 +24,7 @@ def download_and_verify(ticker, file_name, index, progress_bar, basedir=''):
         if verify_file(file_path, file_name, index):
             break
 
-    progress_bar.update(1)
-
-def download_files_for_ticker(ticker, index, basedir=''):
+def download_files_for_ticker(ticker, index, basedir='', WORKERS=4):
     url = f"https://public.bybit.com/trading/{ticker}/"
     try:
         response = requests.get(url, timeout=30)
@@ -39,8 +36,8 @@ def download_files_for_ticker(ticker, index, basedir=''):
             return
 
         with tqdm(total=len(links), desc=f"Downloading {ticker}", unit="file") as progress_bar:
-            with ThreadPoolExecutor(max_workers=32) as executor:
-                futures = [executor.submit(download_and_verify, ticker, file_name, index, progress_bar, basedir) for file_name in links]
+            with ProcessPoolExecutor(max_workers=WORKERS) as executor:
+                futures = [executor.submit(download_and_verify, ticker, file_name, index, basedir) for file_name in links]
                 for future in as_completed(futures):
                     try:
                         future.result(timeout=60)
@@ -49,6 +46,8 @@ def download_files_for_ticker(ticker, index, basedir=''):
                     except Exception as e:
                         logging.error(f"Error occurred: {e}")
                         traceback.print_exc()
+                    finally:
+                        progress_bar.update(1)
 
     except requests.RequestException as e:
         logging.error(f"Failed to retrieve links for ticker {ticker}: {e}")

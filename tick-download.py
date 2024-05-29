@@ -9,7 +9,7 @@ def download_all_tickers():
     index = read_index()
 
     for ticker in TICKERS:
-        download_files_for_ticker(ticker, index, basedir='backdata/tickdata')
+        download_files_for_ticker(ticker, index, basedir='backdata/tickdata', WORKERS=16)
 
 def main():
     download_all_tickers()
